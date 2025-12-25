@@ -1,36 +1,120 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ChalkAI - Diagram Refinement Whiteboard
 
-## Getting Started
+An AI-powered educational whiteboard that helps users create clean, complete diagrams from rough sketches.
 
-First, run the development server:
+## Features
 
+- **Interactive Whiteboard**: Draw freely using tldraw with support for freehand drawing, lines, arrows, and shapes
+- **AI-Powered Refinement**: Get AI suggestions to refine your rough sketches into clean diagrams
+- **Human-in-the-Loop**: You remain in full control - accept suggestions with a single TAB keystroke
+- **Intent-Based**: Describe your diagram intent in text to guide the AI
+
+## Setup
+
+### Prerequisites
+
+- Bun (JavaScript runtime)
+- Google Gemini API key
+
+### Installation
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Set up environment variables:
+Create a `.env.local` file in the `frontend` directory:
+```
+GOOGLE_GENERATIVE_AI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-2.0-flash-exp  # Optional: specify model name
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Run the development server:
+```bash
+bun run dev
+```
 
-## Learn More
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-To learn more about Next.js, take a look at the following resources:
+## Usage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Draw**: Use the whiteboard to create a rough sketch of your diagram
+2. **Describe**: Enter a brief description (max 120 characters) of what your diagram represents
+3. **Get Suggestion**: Click "Get AI Suggestion" to receive a refined version
+4. **Accept**: Press TAB to accept the suggestion and replace your original drawing
+5. **Continue**: Keep drawing and refining as needed
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Technical Details
 
-## Deploy on Vercel
+### Stack
+- **Frontend**: Next.js 16+ (App Router), React 19, TypeScript
+- **Whiteboard**: tldraw v4
+- **UI Components**: shadcn/ui (minimal styling)
+- **AI**: Google Gemini Flash 2.5 (via @ai-sdk/google)
+- **Runtime**: Bun
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Architecture
+- Canvas logic separated from AI logic
+- AI integration isolated in `/api/complete-diagram`
+- Modular, readable code structure
+- Fail-safe error handling
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+
+```
+frontend/
+├── app/
+│   ├── api/
+│   │   └── complete-diagram/
+│   │       └── route.ts          # AI processing endpoint
+│   ├── page.tsx                   # Main application page
+│   ├── layout.tsx                 # Root layout
+│   └── globals.css                # Global styles
+├── components/
+│   ├── ui/                        # shadcn/ui components
+│   ├── whiteboard.tsx             # tldraw whiteboard component
+│   └── intent-input.tsx           # Intent description input
+└── lib/
+    └── utils.ts                   # Utility functions
+```
+
+## API Endpoint
+
+### POST `/api/complete-diagram`
+
+Accepts multipart form data:
+- `image`: PNG representation of the canvas
+- `intent`: Short intent string (max 120 chars)
+
+Returns:
+- `svg`: AI-generated SVG diagram
+
+## Notes
+
+- The AI is designed for diagram refinement, not creative illustration
+- SVG output is strictly enforced
+- Original drawings are never auto-modified
+- TAB key acceptance is instantaneous and reliable
+
+## Development
+
+```bash
+# Development
+bun run dev
+
+# Build
+bun run build
+
+# Start production server
+bun run start
+
+# Lint
+bun run lint
+```
+
+## License
+
+MIT
