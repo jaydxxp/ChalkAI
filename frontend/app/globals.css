@@ -24,18 +24,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --muted: #27272a;
-    --muted-foreground: #a1a1aa;
-    --accent: #27272a;
-    --accent-foreground: #ededed;
-    --input: #3f3f46;
-    --ring: #ededed;
-  }
-}
+
 
 body {
   background: var(--background);

@@ -1,151 +1,148 @@
 import { google } from "@ai-sdk/google"
-import { generateObject } from "ai"
+import { generateText } from "ai"
 import { NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
-
-// Install zod if not present
-// bun add zod
 
 export const runtime = "nodejs"
 export const maxDuration = 30
 
-const ResponseSchema = z.object({
-  svg: z.string().describe("The complete SVG diagram as a string"),
-})
+function cleanAndValidateSVG(text: string): string | null {
+  if (!text) return null;
+
+  // Remove markdown code blocks
+  text = text.replace(/```svg\n?/g, '').replace(/```\n?/g, '');
+  
+  // Remove any text before the first <svg
+  const svgStartIndex = text.indexOf('<svg');
+  if (svgStartIndex === -1) return null;
+  text = text.substring(svgStartIndex);
+  
+  // Remove any text after the last </svg>
+  const svgEndIndex = text.lastIndexOf('</svg>');
+  if (svgEndIndex === -1) return null;
+  text = text.substring(0, svgEndIndex + 6);
+  
+  // Basic validation
+  if (!text.startsWith('<svg') || !text.endsWith('</svg>')) {
+    return null;
+  }
+  
+  // Check for balanced tags
+  const openTags = (text.match(/<svg/g) || []).length;
+  const closeTags = (text.match(/<\/svg>/g) || []).length;
+  if (openTags !== closeTags) return null;
+  
+  // Ensure proper namespace
+  if (!text.includes('xmlns="http://www.w3.org/2000/svg"')) {
+    text = text.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+  
+  // Add viewBox if missing
+  if (!text.includes('viewBox')) {
+    text = text.replace('<svg', '<svg viewBox="0 0 800 600"');
+  }
+  
+  return text.trim();
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Use server-side environment variables (without NEXT_PUBLIC_ prefix)
-    // NEXT_PUBLIC_ variables are exposed to client-side, which is a security risk for API keys
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-    const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash"
+    const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp"
     
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY" },
+        { status: 500 }
+      )
+    }
+
     const formData = await request.formData()
     const imageFile = formData.get("image") as File
     const intent = formData.get("intent") as string
 
     if (!imageFile) {
-      return NextResponse.json(
-        { error: "Missing image file" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Missing image file" }, { status: 400 })
     }
 
-    if (!intent || intent.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Missing intent description" },
-        { status: 400 }
-      )
+    if (!intent?.trim()) {
+      return NextResponse.json({ error: "Missing intent" }, { status: 400 })
     }
 
-    // Check for API key first
-    if (!apiKey) {
-      console.error("Missing GOOGLE_GENERATIVE_AI_API_KEY environment variable")
-      return NextResponse.json(
-        { error: "API key not configured. Please set GOOGLE_GENERATIVE_AI_API_KEY in .env.local (without NEXT_PUBLIC_ prefix)" },
-        { status: 500 }
-      )
-    }
-
-    // Set the API key in process.env so @ai-sdk/google can read it
-    // (it reads from GOOGLE_GENERATIVE_AI_API_KEY automatically)
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && apiKey) {
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey
-    }
-
-    // Convert image file to base64
-    const arrayBuffer = await imageFile.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    // Convert image to base64
+    const buffer = Buffer.from(await imageFile.arrayBuffer())
     const base64Image = buffer.toString("base64")
     const mimeType = imageFile.type || "image/png"
     const dataUrl = `data:${mimeType};base64,${base64Image}`
 
-    // Prepare the prompt for diagram refinement
-    const prompt = `You are a diagram refinement assistant. Your task is to take a rough, incomplete diagram sketch and refine it into a clean, complete, and accurate diagram based on the user's intent.
+    const prompt = `You are an expert SVG diagram generator. Analyze the provided image and create a clean, accurate SVG representation.
 
-CRITICAL RULES:
-1. The input diagram is INCOMPLETE or ROUGH - your job is to complete and refine it, not replace it
-2. Use the intent text to understand what the diagram should represent
-3. Do NOT introduce new concepts that aren't in the original sketch
-4. Do NOT add decorative elements, colors, or styling beyond what's necessary
-5. Preserve any text labels exactly as they appear
-6. Make lines straight, shapes regular, and connections clear
-7. Output ONLY valid SVG code - no markdown, no explanations, just the SVG element
-8. The SVG should be minimal, clean, and suitable for educational diagrams
-9. Use black strokes on white background (or transparent)
-10. Keep the overall structure and layout similar to the input
+USER INTENT: "${intent}"
 
-User Intent: "${intent}"
+CRITICAL REQUIREMENTS:
+1. Output ONLY the SVG code - no explanations, no markdown, no extra text
+2. Start with <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+3. End with </svg>
+4. Use proper SVG syntax with all tags closed
+5. Preserve all text labels exactly as shown
+6. Use simple shapes: <rect>, <circle>, <line>, <path>, <text>
+7. Use black strokes (#000000) and white/transparent fills
+8. Maintain the diagram's structure and relationships
 
-Analyze the input diagram and produce a refined, complete SVG diagram that fulfills the intent while preserving the original structure.`
+FORBIDDEN:
+- Do NOT add markdown code blocks
+- Do NOT add explanations or comments
+- Do NOT invent content not in the image
+- Do NOT use complex gradients or effects
 
-    console.log("Calling Gemini API with model:", modelName)
-    console.log("Image size:", imageFile.size, "bytes")
-    console.log("Intent:", intent)
-    
-    let result
-    try {
-      // The google() function automatically reads GOOGLE_GENERATIVE_AI_API_KEY from process.env
-      result = await generateObject({
+Generate the SVG now:`;
+
+    let retries = 0;
+    const maxRetries = 2;
+    let validSVG: string | null = null;
+
+    while (retries <= maxRetries && !validSVG) {
+      const result = await generateText({
         model: google(modelName),
         messages: [
           {
             role: "user",
             content: [
-              {
-                type: "image",
-                image: dataUrl,
-              },
-              {
-                type: "text",
-                text: prompt,
-              },
+              { type: "image", image: dataUrl },
+              { type: "text", text: prompt },
             ],
           },
         ],
-        schema: ResponseSchema,
+        temperature: retries > 0 ? 0.3 : 0.1, // Lower temperature on retries
       })
-    } catch (apiError) {
-      console.error("Gemini API error:", apiError)
-      const errorMessage = apiError instanceof Error ? apiError.message : "Unknown API error"
+
+      validSVG = cleanAndValidateSVG(result.text);
       
-      // Provide helpful error messages
-      if (errorMessage.includes("API key") || errorMessage.includes("authentication")) {
-        return NextResponse.json(
-          { error: "Invalid API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY in .env.local" },
-          { status: 401 }
-        )
+      if (!validSVG) {
+        console.warn(`Attempt ${retries + 1} failed. Raw output:`, result.text);
+        retries++;
       }
-      if (errorMessage.includes("model") || errorMessage.includes("not found")) {
-        return NextResponse.json(
-          { error: `Model ${modelName} not found. Try setting GEMINI_MODEL=gemini-1.5-flash in .env.local` },
-          { status: 400 }
-        )
-      }
-      
-      return NextResponse.json(
-        { error: "Failed to call Gemini API", details: errorMessage },
-        { status: 500 }
-      )
     }
 
-    const svg = result.object.svg
-
-    // Validate that the response is actually SVG
-    if (!svg || !svg.trim().startsWith("<svg")) {
+    if (!validSVG) {
       return NextResponse.json(
-        { error: "AI did not return valid SVG" },
+        { 
+          error: "Failed to generate valid SVG after multiple attempts",
+          details: "The AI model did not produce properly formatted SVG code"
+        },
         { status: 500 }
-      )
+      );
     }
 
-    return NextResponse.json({ svg })
+    return NextResponse.json({ svg: validSVG });
+
   } catch (error) {
     console.error("API error:", error)
     return NextResponse.json(
-      { error: "Failed to process diagram", details: error instanceof Error ? error.message : "Unknown error" },
+      {
+        error: "Failed to process diagram",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     )
   }
 }
-
