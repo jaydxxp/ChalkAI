@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
+  "dev": "next dev",
+  "build": "next build && cp -r .next/static .next/standalone/frontend/.next/static && cp -r public .next/standalone/frontend/public",
+  "start": "node .next/standalone/frontend/server.js",
+  "lint": "eslint"
+},
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.1",
     "@ai-sdk/google": "^3.0.1",
