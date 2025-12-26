@@ -1,14 +1,20 @@
 @import "tailwindcss";
 
 :root {
+  /* Minimal Monochrome Palette */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
+  
+  /* Modern Accents */
   --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #171717;
-  --input: #e4e4e7;
-  --ring: #171717;
+  --muted-foreground: #737373;
+  --border: #eaeaea;
+  --input: #f4f4f5;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  
+  --ring: #000000;
+  --radius: 0.75rem;
 }
 
 @theme inline {
@@ -16,18 +22,31 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
   --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
   --color-ring: var(--ring);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --radius-lg: var(--radius);
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
 }
-
-
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism utility for floating islands */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.02),
+    0 2px 4px -1px rgba(0, 0, 0, 0.02),
+    0 12px 24px -4px rgba(0, 0, 0, 0.05);
 }
