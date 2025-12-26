@@ -6,6 +6,7 @@ import "@tldraw/tldraw/tldraw.css";
 
 interface WhiteboardProps {
   onExportReady: (exportFn: () => Promise<string | null>) => void;
+  onInsertReady: (insertFn: () => void) => void;
   generatedImage: string | null;
   onAcceptSuggestion: () => void;
   onDrawingActivity?: () => void;
@@ -19,25 +20,105 @@ interface ExportContext {
 
 export function Whiteboard({
   onExportReady,
+  onInsertReady,
   generatedImage,
   onAcceptSuggestion,
   onDrawingActivity,
 }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null);
   const exportContextRef = useRef<ExportContext | null>(null);
+  const generatedImageRef = useRef<string | null>(null);
+
+  // Keep generatedImageRef in sync
+  useEffect(() => {
+    generatedImageRef.current = generatedImage;
+  }, [generatedImage]);
+
+  // Insert image function (shared by Tab key and Accept button)
+  const insertImage = useCallback(() => {
+    const editor = editorRef.current;
+    const imageData = generatedImageRef.current;
+    if (!editor || !imageData) return;
+
+    const context = exportContextRef.current;
+
+    // Delete only the shapes that were exported (or all if no context)
+    if (context && context.shapeIds.length > 0) {
+      editor.deleteShapes(context.shapeIds);
+    } else {
+      const ids = Array.from(editor.getCurrentPageShapeIds());
+      if (ids.length) editor.deleteShapes(ids);
+    }
+
+    const dataUrl = `data:image/png;base64,${imageData}`;
+    const img = new Image();
+    img.src = dataUrl;
+
+    img.onload = () => {
+      const width = img.width || 800;
+      const height = img.height || 600;
+      const targetBounds = context?.bounds || editor.getViewportPageBounds();
+      const maxW = targetBounds.w;
+      const maxH = targetBounds.h;
+      const scale = Math.min(maxW / width, maxH / height, 1);
+      const w = width * scale;
+      const h = height * scale;
+
+      const assetId = AssetRecordType.createId();
+      const shapeId = createShapeId();
+
+      editor.createAssets([
+        {
+          id: assetId,
+          type: "image",
+          typeName: "asset",
+          props: {
+            name: "ai-generated.png",
+            src: dataUrl,
+            w: width,
+            h: height,
+            mimeType: "image/png",
+            isAnimated: false,
+          },
+          meta: {},
+        },
+      ]);
+
+      const x = targetBounds.x + targetBounds.w / 2 - w / 2;
+      const y = targetBounds.y + targetBounds.h / 2 - h / 2;
+
+      editor.createShape({
+        id: shapeId,
+        type: "image",
+        x,
+        y,
+        props: { w, h, assetId },
+      });
+
+      exportContextRef.current = null;
+      onAcceptSuggestion();
+    };
+
+    img.onerror = () => {
+      console.error("Failed to load generated image");
+      exportContextRef.current = null;
+    };
+  }, [onAcceptSuggestion]);
+
+  // Expose insertImage to parent
+  useEffect(() => {
+    onInsertReady(insertImage);
+  }, [insertImage, onInsertReady]);
 
   // Mount editor + export
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
 
-      // Listen for drawing activity (shape changes)
       if (onDrawingActivity) {
         editor.store.listen((entry) => {
-          // Check if any shapes were added or updated
           const hasShapeChanges = Object.keys(entry.changes.added).some(k => k.startsWith('shape:')) ||
             Object.keys(entry.changes.updated).some(k => k.startsWith('shape:'));
-          
           if (hasShapeChanges) {
             onDrawingActivity();
           }
@@ -45,7 +126,6 @@ export function Whiteboard({
       }
 
       const exportCanvas = async (): Promise<string | null> => {
-        // Check for selection first
         const selectedIds = editor.getSelectedShapeIds();
         const idsToExport: TLShapeId[] = selectedIds.length > 0 
           ? [...selectedIds] 
@@ -53,7 +133,6 @@ export function Whiteboard({
         
         if (!idsToExport.length) return null;
 
-        // Calculate combined bounds of all shapes to export
         let combinedBounds: Box | null = null;
         for (const id of idsToExport) {
           const shapeBounds = editor.getShapePageBounds(id);
@@ -68,11 +147,7 @@ export function Whiteboard({
 
         if (!combinedBounds) return null;
 
-        // Store context for replacement
-        exportContextRef.current = { 
-          shapeIds: idsToExport, 
-          bounds: combinedBounds 
-        };
+        exportContextRef.current = { shapeIds: idsToExport, bounds: combinedBounds };
 
         const result = await editor.toImage(idsToExport, {
           format: "png",
@@ -92,102 +167,19 @@ export function Whiteboard({
     [onExportReady, onDrawingActivity]
   );
 
-  // Accept AI suggestion
+  // Tab key handler
   useEffect(() => {
-    if (!generatedImage || !editorRef.current) return;
+    if (!generatedImage) return;
 
-    const handleKeyDown = async (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
       e.preventDefault();
-
-      const editor = editorRef.current!;
-      const context = exportContextRef.current;
-
-      // Delete only the shapes that were exported (or all if no context)
-      if (context && context.shapeIds.length > 0) {
-        editor.deleteShapes(context.shapeIds);
-      } else {
-        // Fallback: delete all shapes
-        const ids = Array.from(editor.getCurrentPageShapeIds());
-        if (ids.length) editor.deleteShapes(ids);
-      }
-
-      // Create PNG image asset with base64 data
-      const dataUrl = `data:image/png;base64,${generatedImage}`;
-
-      // Load image to get dimensions
-      const img = new Image();
-      img.src = dataUrl;
-
-      img.onload = () => {
-        const width = img.width || 800;
-        const height = img.height || 600;
-
-        // Use original bounds if available, otherwise viewport
-        const targetBounds = context?.bounds || editor.getViewportPageBounds();
-
-        // Scale to fit in target area
-        const maxW = targetBounds.w;
-        const maxH = targetBounds.h;
-        const scale = Math.min(maxW / width, maxH / height, 1);
-
-        const w = width * scale;
-        const h = height * scale;
-
-        // Create asset ID and shape ID
-        const assetId = AssetRecordType.createId();
-        const shapeId = createShapeId();
-
-        // Create the image asset first
-        editor.createAssets([
-          {
-            id: assetId,
-            type: "image",
-            typeName: "asset",
-            props: {
-              name: "ai-generated.png",
-              src: dataUrl,
-              w: width,
-              h: height,
-              mimeType: "image/png",
-              isAnimated: false,
-            },
-            meta: {},
-          },
-        ]);
-
-        // Position at center of original bounds (or viewport center)
-        const x = targetBounds.x + targetBounds.w / 2 - w / 2;
-        const y = targetBounds.y + targetBounds.h / 2 - h / 2;
-
-        // Create image shape referencing the asset
-        editor.createShape({
-          id: shapeId,
-          type: "image",
-          x,
-          y,
-          props: {
-            w,
-            h,
-            assetId,
-          },
-        });
-
-        // Clear context after use
-        exportContextRef.current = null;
-
-        onAcceptSuggestion();
-      };
-
-      img.onerror = () => {
-        console.error("Failed to load generated image");
-        exportContextRef.current = null;
-      };
+      insertImage();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [generatedImage, onAcceptSuggestion]);
+  }, [generatedImage, insertImage]);
 
   return (
     <div className="relative w-full h-full">
@@ -195,4 +187,3 @@ export function Whiteboard({
     </div>
   );
 }
-

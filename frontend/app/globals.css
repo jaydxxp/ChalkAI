@@ -4,7 +4,7 @@
   /* Minimal Monochrome Palette */
   --background: #ffffff;
   --foreground: #000000;
-  
+
   /* Modern Accents */
   --muted: #f4f4f5;
   --muted-foreground: #737373;
@@ -12,7 +12,7 @@
   --input: #f4f4f5;
   --primary: #000000;
   --primary-foreground: #ffffff;
-  
+
   --ring: #000000;
   --radius: 0.75rem;
 }
@@ -45,8 +45,18 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 
+  box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.02),
     0 2px 4px -1px rgba(0, 0, 0, 0.02),
     0 12px 24px -4px rgba(0, 0, 0, 0.05);
+}
+
+/* Hide scrollbar utility */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }

@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+.env
+.git
+.gitignore
+Dockerfile
+README.md
+.env.local

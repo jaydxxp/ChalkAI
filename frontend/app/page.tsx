@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Whiteboard } from "@/components/whiteboard";
 import { IntentInput } from "@/components/intent-input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, RotateCcw, Sparkles, Check, X, Mic, MicOff } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Check, X, Mic, MicOff, History, Clock, Download } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
@@ -19,6 +19,17 @@ export default function Home() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // History Panel state
+  interface HistoryItem {
+    id: string;
+    prompt: string;
+    imageData: string;
+    timestamp: number;
+  }
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const currentPromptRef = useRef("");
 
   // Voice input state
   const [isListening, setIsListening] = useState(false);
@@ -41,6 +52,15 @@ export default function Home() {
   const handleExportReady = useCallback(
     (exportFn: () => Promise<string | null>) => {
       exportFnRef.current = exportFn;
+    },
+    []
+  );
+
+  // Receive insert function from Whiteboard
+  const insertFnRef = useRef<(() => void) | null>(null);
+  const handleInsertReady = useCallback(
+    (insertFn: () => void) => {
+      insertFnRef.current = insertFn;
     },
     []
   );
@@ -106,6 +126,15 @@ export default function Home() {
 
       const data = await apiResponse.json();
       setGeneratedImage(data.image_data);
+      
+      // Save to history
+      const newHistoryItem: HistoryItem = {
+        id: Date.now().toString(),
+        prompt: promptText,
+        imageData: data.image_data,
+        timestamp: Date.now(),
+      };
+      setHistory((prev) => [newHistoryItem, ...prev].slice(0, 10)); // Keep last 10
     } catch (err) {
       console.error("Error:", err);
       setError(
@@ -117,10 +146,18 @@ export default function Home() {
   }, [intent]);
 
   const handleAcceptSuggestion = useCallback(() => {
+    // The whiteboard's insertImage is called via the Tab key or via insertFnRef
+    // Clear state after insertion completes (insertImage calls this callback)
     setGeneratedImage(null);
     setIntent("");
     setResetSignal((prev) => prev + 1);
-    // The whiteboard component handles the actual insertion
+  }, []);
+
+  // Trigger accept from button (calls whiteboard's insertImage)
+  const handleAcceptClick = useCallback(() => {
+    if (insertFnRef.current) {
+      insertFnRef.current();
+    }
   }, []);
 
   const handleClearCanvas = useCallback(() => {
@@ -134,6 +171,21 @@ export default function Home() {
     setGeneratedImage(null);
     // We keep the intent so the user can modify it significantly if needed
   }, []);
+
+  // Import from history
+  const handleImportFromHistory = useCallback((item: HistoryItem) => {
+    setGeneratedImage(item.imageData);
+    setIntent(item.prompt);
+    setShowHistory(false);
+  }, []);
+
+  // Prompt templates
+  const PROMPT_TEMPLATES = [
+    { label: "Professional", prompt: "Make this diagram look professional and polished" },
+    { label: "Colorful", prompt: "Add vibrant colors and make it visually appealing" },
+    { label: "Simplified", prompt: "Simplify this into a clean minimal diagram" },
+    { label: "Technical", prompt: "Convert this into a technical architecture diagram" },
+  ];
 
   // Handle keyboard shortcuts (Esc to reject)
   useEffect(() => {
@@ -273,6 +325,7 @@ export default function Home() {
       <div className="absolute inset-0 z-0">
         <Whiteboard
           onExportReady={handleExportReady}
+          onInsertReady={handleInsertReady}
           generatedImage={generatedImage}
           onAcceptSuggestion={handleAcceptSuggestion}
           onDrawingActivity={handleDrawingActivity}
@@ -301,6 +354,23 @@ export default function Home() {
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
           className="glass rounded-2xl shadow-2xl pointer-events-auto flex flex-col gap-2 "
         >
+          {/* Prompt Templates Row */}
+          <div className="flex items-center gap-1.5 px-3 pt-2 overflow-x-auto hide-scrollbar">
+            {PROMPT_TEMPLATES.map((template) => (
+              <button
+                key={template.label}
+                onClick={() => {
+                  setIntent(template.prompt);
+                  handleRequestSuggestion(template.prompt);
+                }}
+                disabled={isLoading}
+                className="shrink-0 px-3 py-1.5 text-[11px] font-medium rounded-full border border-black/10 hover:bg-black hover:text-white transition-all disabled:opacity-50"
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+
           {/* Input Row */}
           <div className="flex items-center m-2 gap-2 p-1">
             <Button
@@ -453,12 +523,108 @@ export default function Home() {
                   Reject (Esc)
                 </Button>
                 <Button
-                  onClick={handleAcceptSuggestion}
+                  onClick={handleAcceptClick}
                   className="rounded-xl bg-black text-white hover:bg-black/90 hover:scale-105 transition-all shadow-lg shadow-black/20 h-9 px-6 text-xs"
                 >
                   <Check className="w-3.5 h-3.5 mr-1.5" />
                   Accept (Tab)
                 </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 5. Loading Shimmer (while generating) */}
+      <AnimatePresence>
+        {isLoading && !generatedImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute bottom-8 right-8 z-30 glass p-4 rounded-3xl shadow-2xl w-[300px]"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-black/10 rounded-full animate-pulse" />
+              <div className="h-4 w-24 bg-black/10 rounded animate-pulse" />
+            </div>
+            <div className="bg-black/5 rounded-2xl h-48 animate-pulse flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-black/30" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 6. History Toggle Button (Top Left - offset from TLDraw menu) */}
+      <motion.button
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        onClick={() => setShowHistory(!showHistory)}
+        className={`absolute top-6 left-6 z-20 p-3 glass rounded-full shadow-lg transition-all ${
+          showHistory ? "bg-black text-white" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+        }`}
+        title="Generation History"
+      >
+        <History className="w-5 h-5" />
+        {history.length > 0 && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-black text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+            {history.length}
+          </span>
+        )}
+      </motion.button>
+
+      {/* 7. History Panel (Slide from Left) */}
+      <AnimatePresence>
+        {showHistory && (
+          <motion.div
+            initial={{ opacity: 0, x: -300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -300 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="absolute top-20 left-6 z-20 w-80 max-h-[70vh] glass rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          >
+            <div className="p-4 border-b border-black/5">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Recent Generations
+              </h2>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {history.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-8">
+                  No generations yet. Create your first diagram!
+                </p>
+              ) : (
+                history.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-white rounded-xl border border-black/5 overflow-hidden hover:shadow-md transition-shadow group"
+                  >
+                    <img
+                      src={`data:image/png;base64,${item.imageData}`}
+                      alt={item.prompt}
+                      className="w-full h-32 object-cover"
+                    />
+                    <div className="p-2">
+                      <p className="text-xs text-muted-foreground truncate mb-2">
+                        {item.prompt}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(item.timestamp).toLocaleTimeString()}
+                        </span>
+                        <Button
+                          size="sm"
+                          onClick={() => handleImportFromHistory(item)}
+                          className="h-7 px-3 text-xs rounded-lg"
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Import
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </motion.div>
         )}
