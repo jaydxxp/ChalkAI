@@ -8,6 +8,7 @@ interface WhiteboardProps {
   onExportReady: (exportFn: () => Promise<string | null>) => void;
   generatedImage: string | null;
   onAcceptSuggestion: () => void;
+  onDrawingActivity?: () => void;
 }
 
 // Context to track what was exported (for targeted replacement)
@@ -20,6 +21,7 @@ export function Whiteboard({
   onExportReady,
   generatedImage,
   onAcceptSuggestion,
+  onDrawingActivity,
 }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null);
   const exportContextRef = useRef<ExportContext | null>(null);
@@ -28,6 +30,19 @@ export function Whiteboard({
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
+
+      // Listen for drawing activity (shape changes)
+      if (onDrawingActivity) {
+        editor.store.listen((entry) => {
+          // Check if any shapes were added or updated
+          const hasShapeChanges = Object.keys(entry.changes.added).some(k => k.startsWith('shape:')) ||
+            Object.keys(entry.changes.updated).some(k => k.startsWith('shape:'));
+          
+          if (hasShapeChanges) {
+            onDrawingActivity();
+          }
+        }, { source: 'user', scope: 'document' });
+      }
 
       const exportCanvas = async (): Promise<string | null> => {
         // Check for selection first
@@ -74,7 +89,7 @@ export function Whiteboard({
 
       onExportReady(exportCanvas);
     },
-    [onExportReady]
+    [onExportReady, onDrawingActivity]
   );
 
   // Accept AI suggestion
