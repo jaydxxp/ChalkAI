@@ -1,102 +1,106 @@
-"use client"
+"use client";
 
-import { useState, useCallback, useRef } from "react"
-import { Whiteboard } from "@/components/whiteboard"
-import { IntentInput } from "@/components/intent-input"
-import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
+import { useState, useCallback, useRef } from "react";
+import { Whiteboard } from "@/components/whiteboard";
+import { IntentInput } from "@/components/intent-input";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 export default function Home() {
-  const [intent, setIntent] = useState("")
-  const [suggestionSvg, setSuggestionSvg] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const exportFnRef = useRef<(() => Promise<string | null>) | null>(null)
+  const [intent, setIntent] = useState("");
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resetSignal, setResetSignal] = useState(0);
+  const exportFnRef = useRef<(() => Promise<string | null>) | null>(null);
 
-  const handleExportReady = useCallback((exportFn: () => Promise<string | null>) => {
-    exportFnRef.current = exportFn
-  }, [])
+  const handleExportReady = useCallback(
+    (exportFn: () => Promise<string | null>) => {
+      exportFnRef.current = exportFn;
+    },
+    []
+  );
 
   const handleRequestSuggestion = useCallback(async () => {
     if (!exportFnRef.current) {
-      setError("Canvas not ready. Please wait a moment and try again.")
-      return
+      setError("Canvas not ready. Please wait a moment and try again.");
+      return;
     }
 
     if (!intent.trim()) {
-      setError("Please provide an intent description")
-      return
+      setError("Please provide an intent description");
+      return;
     }
 
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true);
+    setError(null);
 
     try {
       // Export canvas to PNG
-      const imageDataUrl = await exportFnRef.current()
-      
-      if (!imageDataUrl) {
-        setError("Please draw something on the canvas first")
-        setIsLoading(false)
-        return
-      }
+      const imageDataUrl = await exportFnRef.current();
 
-      // Convert data URL to blob
-      let blob: Blob
-      try {
-        // If it's already a data URL, convert directly
-        if (imageDataUrl.startsWith("data:")) {
-          const response = await fetch(imageDataUrl)
-          blob = await response.blob()
+      let base64Image: string | undefined;
+
+      // Convert data URL to base64 string
+      if (imageDataUrl) {
+        if (imageDataUrl.startsWith("data:image/png;base64,")) {
+          // Extract base64 from data URL
+          base64Image = imageDataUrl.replace("data:image/png;base64,", "");
         } else {
-          // If it's a URL, fetch it
-          const response = await fetch(imageDataUrl)
-          blob = await response.blob()
+          // Fetch and convert
+          const response = await fetch(imageDataUrl);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          await new Promise((resolve, reject) => {
+            reader.onloadend = resolve;
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          const dataUrl = reader.result as string;
+          base64Image = dataUrl.replace("data:image/png;base64,", "");
         }
-      } catch (fetchError) {
-        console.error("Error converting image to blob:", fetchError)
-        setError("Failed to process canvas image")
-        setIsLoading(false)
-        return
       }
 
-      // Create form data
-      const formData = new FormData()
-      formData.append("image", blob, "canvas.png")
-      formData.append("intent", intent)
-
-      // Call API
+      // Call API with JSON
       const apiResponse = await fetch("/api/complete-diagram", {
         method: "POST",
-        body: formData,
-      })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: intent,
+          image_data: base64Image,
+        }),
+      });
 
       if (!apiResponse.ok) {
-        const errorData = await apiResponse.json()
-        throw new Error(errorData.error || "Failed to get AI suggestion")
+        const errorData = await apiResponse.json();
+        throw new Error(errorData.error || "Failed to get AI suggestion");
       }
 
-      const data = await apiResponse.json()
-      setSuggestionSvg(data.svg)
+      const data = await apiResponse.json();
+      setGeneratedImage(data.image_data);
     } catch (err) {
-      console.error("Error:", err)
-      setError(err instanceof Error ? err.message : "Failed to get AI suggestion")
+      console.error("Error:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to get AI suggestion"
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [intent])
+  }, [intent]);
 
   const handleAcceptSuggestion = useCallback(() => {
-    setSuggestionSvg(null)
-    // The whiteboard component handles the actual replacement
-  }, [])
+    setGeneratedImage(null);
+    setIntent("");
+    setResetSignal((prev) => prev + 1);
+    // The whiteboard component handles the actual insertion
+  }, []);
 
   const handleClearCanvas = useCallback(() => {
-    // This would need to be implemented in the whiteboard component
-    // For now, we'll just clear the suggestion
-    setSuggestionSvg(null)
-    setError(null)
-  }, [])
+    setGeneratedImage(null);
+    setError(null);
+    setIntent("");
+    setResetSignal((prev) => prev + 1);
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-full bg-background">
@@ -104,7 +108,8 @@ export default function Home() {
       <header className="border-b border-input px-6 py-4">
         <h1 className="text-2xl font-semibold">ChalkAI - Diagram Refinement</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Draw a rough diagram, describe your intent, and get AI-refined suggestions
+          Draw a rough diagram, describe your intent, and get AI-refined
+          suggestions
         </p>
       </header>
 
@@ -114,9 +119,21 @@ export default function Home() {
         <div className="flex-1 relative min-h-0">
           <Whiteboard
             onExportReady={handleExportReady}
-            suggestionSvg={suggestionSvg}
+            generatedImage={generatedImage}
             onAcceptSuggestion={handleAcceptSuggestion}
           />
+
+          {/* Preview generated image */}
+          {generatedImage && (
+            <div className="absolute bottom-4 right-4 border rounded-lg shadow-lg bg-background p-2 z-50">
+              <p className="text-xs text-muted-foreground mb-2">AI Suggestion Preview</p>
+              <img
+                src={`data:image/png;base64,${generatedImage}`}
+                alt="AI suggestion preview"
+                className="max-w-[200px] max-h-[150px] rounded"
+              />
+            </div>
+          )}
         </div>
 
         {/* Controls */}
@@ -127,6 +144,7 @@ export default function Home() {
               onIntentChange={setIntent}
               onSubmit={handleRequestSuggestion}
               disabled={isLoading}
+              resetSignal={resetSignal}
             />
 
             {/* Action Buttons */}
@@ -145,7 +163,7 @@ export default function Home() {
                   "Get AI Suggestion"
                 )}
               </Button>
-              
+
               <Button
                 variant="outline"
                 onClick={handleClearCanvas}
@@ -154,7 +172,7 @@ export default function Home() {
                 Clear
               </Button>
 
-              {suggestionSvg && (
+              {generatedImage && (
                 <div className="ml-auto text-sm text-muted-foreground">
                   Press <kbd className="px-2 py-1 bg-muted rounded text-xs">TAB</kbd> to accept
                 </div>
@@ -171,5 +189,5 @@ export default function Home() {
         </div>
       </div>
     </div>
-  )
+  );
 }

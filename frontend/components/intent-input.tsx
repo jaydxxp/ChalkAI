@@ -1,16 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 
 interface IntentInputProps {
   onIntentChange: (intent: string) => void
   onSubmit: () => void
   disabled?: boolean
+  resetSignal?: number
 }
 
-export function IntentInput({ onIntentChange, onSubmit, disabled }: IntentInputProps) {
+export function IntentInput({ onIntentChange, onSubmit, disabled, resetSignal }: IntentInputProps) {
   const [intent, setIntent] = useState("")
+
+  // Reset intent when resetSignal changes
+  useEffect(() => {
+    if (resetSignal !== undefined && resetSignal > 0) {
+      setIntent("")
+    }
+  }, [resetSignal])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.slice(0, 120) // Enforce 120 char limit

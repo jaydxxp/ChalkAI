@@ -1,19 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { Tldraw, Editor, RecordType, TLAssetId } from "@tldraw/tldraw";
+import { Tldraw, Editor, AssetRecordType, createShapeId } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
-
 
 interface WhiteboardProps {
   onExportReady: (exportFn: () => Promise<string | null>) => void;
-  suggestionSvg: string | null;
+  generatedImage: string | null;
   onAcceptSuggestion: () => void;
 }
 
 export function Whiteboard({
   onExportReady,
-  suggestionSvg,
+  generatedImage,
   onAcceptSuggestion,
 }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null);
@@ -47,83 +46,90 @@ export function Whiteboard({
 
   // Accept AI suggestion
   useEffect(() => {
-    if (!suggestionSvg || !editorRef.current) return;
+    if (!generatedImage || !editorRef.current) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
       e.preventDefault();
 
       const editor = editorRef.current!;
 
       // Clear canvas
-      editor.deleteShapes(Array.from(editor.getCurrentPageShapeIds()));
+      const ids = Array.from(editor.getCurrentPageShapeIds());
+      if (ids.length) editor.deleteShapes(ids);
 
-      const assetId = `asset:${crypto.randomUUID()}` as TLAssetId
+      // Create PNG image asset with base64 data
+      const dataUrl = `data:image/png;base64,${generatedImage}`;
 
+      // Load image to get dimensions
+      const img = new Image();
+      img.src = dataUrl;
 
-      const width = 800;
-      const height = 600;
+      img.onload = () => {
+        const width = img.width || 800;
+        const height = img.height || 600;
 
-      // ✅ Create asset properly
-      editor.createAssets([
-  {
-    id: assetId,
-    typeName: "asset",
-    type: "image",
-    props: {
-      name: "ai-diagram.svg",
-      src: `data:image/svg+xml;utf8,${encodeURIComponent(suggestionSvg)}`,
-      mimeType: "image/svg+xml",
-      w: width,
-      h: height,
-      isAnimated: false,
-    },
-    meta: {}, // ✅ REQUIRED
-  },
-])
+        const bounds = editor.getViewportPageBounds();
 
+        const maxW = bounds.w * 0.8;
+        const maxH = bounds.h * 0.8;
 
-      const bounds = editor.getViewportPageBounds();
+        const scale = Math.min(maxW / width, maxH / height, 1);
 
-      // ✅ Create image shape
-      editor.createShape({
-        type: "image",
-        x: bounds.x + bounds.w / 2 - width / 2,
-        y: bounds.y + bounds.h / 2 - height / 2,
-        props: {
-          assetId,
-          w: width,
-          h: height,
-        },
-      });
+        const w = width * scale;
+        const h = height * scale;
 
-      onAcceptSuggestion();
+        // Create asset ID and shape ID
+        const assetId = AssetRecordType.createId();
+        const shapeId = createShapeId();
+
+        // Create the image asset first
+        editor.createAssets([
+          {
+            id: assetId,
+            type: "image",
+            typeName: "asset",
+            props: {
+              name: "ai-generated.png",
+              src: dataUrl,
+              w: width,
+              h: height,
+              mimeType: "image/png",
+              isAnimated: false,
+            },
+            meta: {},
+          },
+        ]);
+
+        // Create image shape referencing the asset
+        editor.createShape({
+          id: shapeId,
+          type: "image",
+          x: bounds.x + bounds.w / 2 - w / 2,
+          y: bounds.y + bounds.h / 2 - h / 2,
+          props: {
+            w,
+            h,
+            assetId,
+          },
+        });
+
+        onAcceptSuggestion();
+      };
+
+      img.onerror = () => {
+        console.error("Failed to load generated image");
+      };
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [suggestionSvg, onAcceptSuggestion]);
+  }, [generatedImage, onAcceptSuggestion]);
 
   return (
     <div className="relative w-full h-full">
       <Tldraw onMount={handleMount} className="w-full h-full" />
-
-      {suggestionSvg && (
-        <div className="absolute inset-0 pointer-events-none z-50 border-4 border-blue-500 border-dashed bg-blue-500/5">
-          <div className="absolute top-4 left-4 bg-white px-4 py-2 rounded shadow border border-blue-500">
-            <p className="text-sm font-medium text-blue-700">
-              AI Suggestion (Press TAB to accept)
-            </p>
-          </div>
-
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div
-              className="bg-white p-4 rounded shadow-xl max-w-4xl max-h-[80vh] overflow-auto"
-              dangerouslySetInnerHTML={{ __html: suggestionSvg }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+
