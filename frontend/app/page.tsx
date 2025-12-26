@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Whiteboard } from "@/components/whiteboard";
 import { IntentInput } from "@/components/intent-input";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Check, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
   const [intent, setIntent] = useState("");
@@ -13,6 +14,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [resetSignal, setResetSignal] = useState(0);
   const exportFnRef = useRef<(() => Promise<string | null>) | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleExportReady = useCallback(
     (exportFn: () => Promise<string | null>) => {
@@ -21,13 +27,17 @@ export default function Home() {
     []
   );
 
-  const handleRequestSuggestion = useCallback(async () => {
+  const handleRequestSuggestion = useCallback(async (overridePrompt?: string) => {
     if (!exportFnRef.current) {
       setError("Canvas not ready. Please wait a moment and try again.");
       return;
     }
 
-    if (!intent.trim()) {
+    // Determine the prompt to use: override or current intent
+    // If it's an event object (from button click), ignore it
+    const promptText = typeof overridePrompt === "string" ? overridePrompt : intent;
+
+    if (!promptText.trim()) {
       setError("Please provide an intent description");
       return;
     }
@@ -66,7 +76,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: intent,
+          prompt: promptText,
           image_data: base64Image,
         }),
       });
@@ -102,92 +112,185 @@ export default function Home() {
     setResetSignal((prev) => prev + 1);
   }, []);
 
+  const handleRejectSuggestion = useCallback(() => {
+    setGeneratedImage(null);
+    // We keep the intent so the user can modify it significantly if needed
+  }, []);
+
+  // Handle keyboard shortcuts (Esc to reject)
+  useEffect(() => {
+    if (!generatedImage) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleRejectSuggestion();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [generatedImage, handleRejectSuggestion]);
+
+  if (!isMounted) return null;
+
   return (
-    <div className="flex flex-col h-screen w-full bg-background">
-      {/* Header */}
-      <header className="border-b border-input px-6 py-4">
-        <h1 className="text-2xl font-semibold">ChalkAI - Diagram Refinement</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Draw a rough diagram, describe your intent, and get AI-refined
-          suggestions
-        </p>
-      </header>
+    <div className="relative h-screen w-full bg-background overflow-hidden font-sans">
+      {/* 1. Fullscreen Whiteboard (Background Layer) */}
+      <div className="absolute inset-0 z-0">
+        <Whiteboard
+          onExportReady={handleExportReady}
+          generatedImage={generatedImage}
+          onAcceptSuggestion={handleAcceptSuggestion}
+        />
+      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Whiteboard */}
-        <div className="flex-1 relative min-h-0">
-          <Whiteboard
-            onExportReady={handleExportReady}
-            generatedImage={generatedImage}
-            onAcceptSuggestion={handleAcceptSuggestion}
-          />
+      {/* 2. Floating Header (Top Left) */}
+      {/* <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="absolute top-6 left-6 z-10 glass px-4 py-2 rounded-full flex items-center gap-3"
+      >
+        <div className="w-3 h-3 bg-black rounded-full" />
+        <h1 className="text-sm font-semibold tracking-tight text-foreground/90">
+          ChalkAI
+        </h1>
+      </motion.div> */}
 
-          {/* Preview generated image */}
-          {generatedImage && (
-            <div className="absolute bottom-4 right-4 border rounded-lg shadow-lg bg-background p-2 z-50">
-              <p className="text-xs text-muted-foreground mb-2">AI Suggestion Preview</p>
-              <img
-                src={`data:image/png;base64,${generatedImage}`}
-                alt="AI suggestion preview"
-                className="max-w-[200px] max-h-[150px] rounded"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Controls */}
-        <div className="border-t border-input px-6 py-4 bg-background">
-          <div className="flex flex-col gap-4 max-w-4xl mx-auto">
-            {/* Intent Input */}
-            <IntentInput
+      {/* 3. Floating Control Island (Bottom Center) */}
+      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none">
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          className="glass rounded-2xl p-2 shadow-2xl pointer-events-auto flex flex-col gap-2"
+        >
+          {/* Input Row */}
+          <div className="flex items-center gap-2 p-1">
+            <Button
+              onClick={() => handleRequestSuggestion("Enhance this sketch into a professional diagram.")}
+              disabled={isLoading}
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              title="Improvise (Quick Enhance)"
+            >
+              <Sparkles className="w-5 h-5" />
+            </Button>
+            
+            <IntentInput // Updated component will need modification to fit this context perfectly, but reusing logic for now
               onIntentChange={setIntent}
               onSubmit={handleRequestSuggestion}
               disabled={isLoading}
               resetSignal={resetSignal}
+              // We'll pass a custom class to strip the default border via the component update next
             />
 
-            {/* Action Buttons */}
-            <div className="flex gap-2 items-center">
-              <Button
-                onClick={handleRequestSuggestion}
-                disabled={isLoading || !intent.trim()}
-                className="flex-1 sm:flex-initial"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Get AI Suggestion"
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={handleClearCanvas}
-                disabled={isLoading}
-              >
-                Clear
-              </Button>
-
-              {generatedImage && (
-                <div className="ml-auto text-sm text-muted-foreground">
-                  Press <kbd className="px-2 py-1 bg-muted rounded text-xs">TAB</kbd> to accept
-                </div>
+            <Button
+              onClick={() => handleRequestSuggestion()}
+              disabled={isLoading || !intent.trim()}
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-xl bg-primary text-primary-foreground hover:scale-105 transition-transform shadow-sm"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Plus className="h-5 w-5" />
               )}
+            </Button>
+          </div>
+
+          {/* Error Message (Collapsible) */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 py-2 text-xs text-red-500 bg-red-50/50 rounded-lg mx-1 mb-1 border border-red-100/50">
+                  {error}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+        
+        {/* Reset Button (Floating nearby) */}
+        <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={handleClearCanvas}
+            disabled={isLoading}
+            className="pointer-events-auto absolute -right-12 bottom-4 p-3 glass rounded-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground hover:rotate-90 transform duration-300"
+            title="Clear Canvas"
+        >
+           <RotateCcw className="w-4 h-4" />
+        </motion.button>
+      </div>
+
+      {/* 4. Preview Card (Bottom Right) */}
+      {/* 4. Large Preview Popover (Bottom Right) */}
+      <AnimatePresence>
+        {generatedImage && (
+          <motion.div
+            initial={{ opacity: 0, x: 20, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="absolute bottom-8 right-8 z-30 glass p-4 rounded-3xl shadow-2xl flex flex-col gap-4 w-auto max-w-[300px] origin-bottom-right"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white shadow-lg">
+                    AI
+                  </span>
+                  <span className="text-sm font-semibold tracking-tight">Suggestion</span>
+                </div>
+                <Button
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={handleRejectSuggestion}
+                  className="h-8 w-8 rounded-full hover:bg-black/5"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 px-4 py-2 rounded border border-red-200 dark:border-red-800">
-                {error}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+            {/* Image Container */}
+            <div className="bg-white rounded-2xl border border-black/5 overflow-hidden flex items-center justify-center relative min-h-[200px] max-h-[400px]">
+              <img
+                src={`data:image/png;base64,${generatedImage}`}
+                alt="Refined diagram"
+                className="max-w-full max-h-[400px] object-contain"
+              />
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-end gap-3 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={handleRejectSuggestion}
+                  className="rounded-xl border-black/10 hover:bg-black/5 hover:text-red-600 hover:border-red-200 transition-colors h-9 px-4 text-xs"
+                >
+                  <X className="w-3.5 h-3.5 mr-1.5" />
+                  Reject (Esc)
+                </Button>
+                <Button
+                  onClick={handleAcceptSuggestion}
+                  className="rounded-xl bg-black text-white hover:bg-black/90 hover:scale-105 transition-all shadow-lg shadow-black/20 h-9 px-6 text-xs"
+                >
+                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                  Accept (Tab)
+                </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -35,19 +35,16 @@ export function IntentInput({ onIntentChange, onSubmit, disabled, resetSignal }:
 
   return (
     <div className="w-full">
-      <Input
+      <input
         type="text"
-        placeholder="Describe your diagram intent (max 120 characters)..."
+        placeholder="Type a command or describe a diagram..."
         value={intent}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         disabled={disabled}
         maxLength={120}
-        className="w-full"
+        className="w-full bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/80 font-medium h-9"
       />
-      <p className="text-xs text-muted-foreground mt-1 text-right">
-        {intent.length}/120
-      </p>
     </div>
   )
 }

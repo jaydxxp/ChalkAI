@@ -42,18 +42,33 @@ export async function POST(request: NextRequest) {
     // Add text prompt
     content.push({
       type: "text",
-      text: `Generate a clean, high-quality diagram based on the provided reference image and the user's explanation.
+      text: `Generate a clean, high-quality, professional diagram as a PNG image based on the provided reference image and the user’s explanation.
 
-The output should:
-- Preserve the reference image's background style (usually a white background), but remove all pencil sketch borders, smudges, or uneven outlines.
-- Focus on clarity and minimalism — use consistent line thickness, smooth shapes, and evenly spaced elements.
-- Treat the drawing as a **diagram**, not an artwork: use clean arrows, boxes, and labeled components.
-- Incorporate all entities, objects, or relationships mentioned in the user's explanation as labeled elements.
-- If the explanation includes key terms, processes, or flow steps, visualize them using directional arrows or block structures.
-- If paragraphs or captions appear in the original, retain them exactly, formatted cleanly.
-- Return ONLY the generated image, no text response.
+IMPORTANT INTERPRETATION RULE:
+- Treat the reference image as a rough sketch or visual hint, NOT as a final diagram.
+- You are allowed and expected to redraw, correct, and standardize shapes, proportions, and outlines to create a proper textbook-style diagram.
 
-User explanation: ${prompt}`,
+Diagram guidelines:
+- Use a clean white background.
+- Replace all rough, hand-drawn, or uneven outlines with precise, smooth, and well-proportioned shapes.
+- Redraw objects using correct canonical forms (e.g., cylinders, boxes, arrows, tubes) even if the sketch is distorted or incomplete.
+- Do NOT trace the sketch. Reconstruct the diagram clearly and accurately.
+- Use consistent line thickness and clean geometry.
+- Use arrows and connectors to clearly show structure, flow, or relationships.
+- Include and clearly label all entities, components, and relationships mentioned in the user’s explanation.
+- If the sketch is ambiguous, resolve it into the most reasonable and standard diagram based on the explanation.
+
+Text handling:
+- Preserve any text or labels from the reference image exactly if they exist.
+- Add missing labels ONLY if they are clearly implied by the user’s explanation.
+
+Output requirements:
+- Output only the generated PNG image.
+- Do not include any text, explanations, or captions outside the image.
+
+User explanation:
+${prompt}
+`,
     });
 
     // Use generateText with image-capable Gemini model
