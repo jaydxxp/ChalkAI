@@ -34,7 +34,7 @@ export function IntentInput({ onIntentChange, onSubmit, disabled, resetSignal }:
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full ">
       <input
         type="text"
         placeholder="Type a command or describe a diagram..."
@@ -43,7 +43,7 @@ export function IntentInput({ onIntentChange, onSubmit, disabled, resetSignal }:
         onKeyDown={handleKeyDown}
         disabled={disabled}
         maxLength={120}
-        className="w-full bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/80 font-medium h-9"
+        className="w-full backdrop-blur-md border-none outline-none text-sm placeholder:text-muted-foreground/80 font-medium h-9"
       />
     </div>
   )

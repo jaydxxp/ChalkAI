@@ -159,22 +159,22 @@ export default function Home() {
       </motion.div> */}
 
       {/* 3. Floating Control Island (Bottom Center) */}
-      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none">
+      <div className="absolute bottom-24 backdrop-blur-md left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none">
         <motion.div
           layout
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          className="glass rounded-2xl p-2 shadow-2xl pointer-events-auto flex flex-col gap-2"
+          className="glass rounded-2xl shadow-2xl pointer-events-auto flex flex-col gap-2 "
         >
           {/* Input Row */}
-          <div className="flex items-center gap-2 p-1">
+          <div className="flex items-center m-2 gap-2 p-1">
             <Button
               onClick={() => handleRequestSuggestion("Enhance this sketch into a professional diagram.")}
               disabled={isLoading}
               variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              className="h-9 w-9 shrink-0 rounded-full text-muted-foreground  hover:text-foreground hover:bg-muted/50"
               title="Improvise (Quick Enhance)"
             >
               <Sparkles className="w-5 h-5" />
