@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Whiteboard } from "@/components/whiteboard";
 import { IntentInput } from "@/components/intent-input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, RotateCcw, Sparkles, Check, X } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Sparkles, Check, X, Mic, MicOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
@@ -19,6 +19,24 @@ export default function Home() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Voice input state
+  const [isListening, setIsListening] = useState(false);
+  const [agentTranscript, setAgentTranscript] = useState("");
+  const agentTranscriptRef = useRef("");
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isListeningRef = useRef(false);
+  const lastActivityTimeRef = useRef(Date.now());
+
+  // Sync refs with state
+  useEffect(() => {
+    agentTranscriptRef.current = agentTranscript;
+  }, [agentTranscript]);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
 
   const handleExportReady = useCallback(
     (exportFn: () => Promise<string | null>) => {
@@ -132,6 +150,121 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [generatedImage, handleRejectSuggestion]);
 
+  // Initialize Speech Recognition
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      console.warn("Speech Recognition not supported in this browser");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + " ";
+        }
+      }
+      if (finalTranscript) {
+        console.log("Voice input:", finalTranscript);
+        setAgentTranscript((prev) => prev + finalTranscript);
+        lastActivityTimeRef.current = Date.now(); // Reset idle timer on speech
+      }
+    };
+
+    recognition.onend = () => {
+      // Auto-restart if still listening
+      if (isListeningRef.current) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error("Recognition restart failed:", e);
+        }
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error !== "no-speech") {
+        setIsListening(false);
+        isListeningRef.current = false;
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.stop();
+    };
+  }, []);
+
+  // Toggle listening
+  const toggleListening = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      alert("Speech recognition is not supported in your browser.");
+      return;
+    }
+
+    if (isListening) {
+      // Stop listening
+      recognition.stop();
+      if (idleCheckIntervalRef.current) {
+        clearInterval(idleCheckIntervalRef.current);
+        idleCheckIntervalRef.current = null;
+      }
+      setIsListening(false);
+      isListeningRef.current = false;
+
+      // If we have a transcript, use it for generation
+      if (agentTranscriptRef.current.trim()) {
+        handleRequestSuggestion(agentTranscriptRef.current.trim());
+      }
+    } else {
+      // Start listening
+      setAgentTranscript("");
+      agentTranscriptRef.current = "";
+      lastActivityTimeRef.current = Date.now();
+      try {
+        recognition.start();
+        setIsListening(true);
+        isListeningRef.current = true;
+
+        // Idle detection: check every 500ms if idle for 4.5 seconds
+        idleCheckIntervalRef.current = setInterval(() => {
+          const idleTime = Date.now() - lastActivityTimeRef.current;
+          if (idleTime > 4500 && agentTranscriptRef.current.trim() && isListeningRef.current) {
+            console.log("Idle detected, auto-generating...");
+            handleRequestSuggestion(agentTranscriptRef.current.trim());
+            // Stop listening after auto-generate
+            recognition.stop();
+            setIsListening(false);
+            isListeningRef.current = false;
+            if (idleCheckIntervalRef.current) {
+              clearInterval(idleCheckIntervalRef.current);
+              idleCheckIntervalRef.current = null;
+            }
+          }
+        }, 500);
+      } catch (e) {
+        console.error("Failed to start recognition:", e);
+      }
+    }
+  }, [isListening, handleRequestSuggestion]);
+
+  // Handle drawing activity - reset idle timer
+  const handleDrawingActivity = useCallback(() => {
+    lastActivityTimeRef.current = Date.now();
+  }, []);
+
   if (!isMounted) return null;
 
   return (
@@ -142,6 +275,7 @@ export default function Home() {
           onExportReady={handleExportReady}
           generatedImage={generatedImage}
           onAcceptSuggestion={handleAcceptSuggestion}
+          onDrawingActivity={handleDrawingActivity}
         />
       </div>
 
@@ -190,7 +324,7 @@ export default function Home() {
 
             <Button
               onClick={() => handleRequestSuggestion()}
-              disabled={isLoading || !intent.trim()}
+              disabled={isLoading || (!intent.trim() && !agentTranscript.trim())}
               size="icon"
               className="h-10 w-10 shrink-0 rounded-xl bg-primary text-primary-foreground hover:scale-105 transition-transform shadow-sm"
             >
@@ -200,7 +334,45 @@ export default function Home() {
                 <Plus className="h-5 w-5" />
               )}
             </Button>
+
+            {/* Mic Button */}
+            <Button
+              onClick={toggleListening}
+              disabled={isLoading}
+              variant={isListening ? "default" : "ghost"}
+              size="icon"
+              className={`h-10 w-10 shrink-0 rounded-xl transition-all ${
+                isListening 
+                  ? "bg-red-500 text-white hover:bg-red-600 animate-pulse" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+            </Button>
           </div>
+
+          {/* Live Transcript (when listening) */}
+          <AnimatePresence>
+            {isListening && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 py-2 text-xs bg-red-50/50 rounded-lg mx-1 mb-1 border border-red-100/50">
+                  <div className="flex items-center gap-2 text-red-600 font-medium mb-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    Listening...
+                  </div>
+                  <p className="text-muted-foreground italic">
+                    {agentTranscript || "Start speaking..."}
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Error Message (Collapsible) */}
           <AnimatePresence>
