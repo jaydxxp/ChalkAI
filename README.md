@@ -152,8 +152,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 graph TD
     A[User Draws Sketch] --> B[tldraw Canvas]
     B --> C[Export to PNG]
-    C --> D[/api/complete-diagram]
-    D --> E[Google Gemini 2.5 Flash]
+    C --> D["/api/complete-diagram"]
+    D --> E["Google Gemini 2.5 Flash"]
     E --> F[Generated PNG]
     F --> G[Preview Panel]
     G -->|Tab| H[Accept & Replace]
