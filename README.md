@@ -19,8 +19,7 @@
 ---
 
 ## 🎥 Demo
-
-![ChalkAI Demo](https://placehold.co/600x400/png?text=Replace+with+your+Demo+GIF)
+ (https://ik.imagekit.io/s17cs5qxl/ChalkAi.mp4) 
 
 ---
 
