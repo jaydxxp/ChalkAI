@@ -18,6 +18,12 @@
 
 ---
 
+## 🎥 Demo
+
+![ChalkAI Demo](https://placehold.co/600x400/png?text=Replace+with+your+Demo+GIF)
+
+---
+
 ## ✨ Features
 
 | Feature | Description |
