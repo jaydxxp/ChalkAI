@@ -23,10 +23,8 @@
 ---
 
 ## 🎥 Demo
-<video controls width="100%">
-  <source src="https://ik.imagekit.io/s17cs5qxl/ChalkAi.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+https://ik.imagekit.io/s17cs5qxl/ChalkAi.mp4
+
 
 
 
