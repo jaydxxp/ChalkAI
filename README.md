@@ -16,6 +16,10 @@
   An intelligent whiteboard application that uses Google Gemini to refine hand-drawn sketches into clean, publication-ready diagrams.
 </p>
 
+<p align="center">
+  <strong>Built by <a href="https://github.com/Abhishek-Sonje">Abhishek</a> & <a href="https://github.com/jaydxxp">Jaydeep</a></strong>
+</p>
+
 ---
 
 ## 🎥 Demo
