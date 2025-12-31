@@ -23,7 +23,12 @@
 ---
 
 ## 🎥 Demo
-https://ik.imagekit.io/s17cs5qxl/ChalkAi.mp4
+
+
+
+
+
+https://github.com/user-attachments/assets/69496cf1-7e2d-4a32-bc0d-b29b8c92ade3
 
 
 
